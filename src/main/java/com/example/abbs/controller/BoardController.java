@@ -2,14 +2,15 @@ package com.example.abbs.controller;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 
 @Controller
-public class TestController {
+@RequestMapping("/board")
+public class BoardController {
 
-	@GetMapping("/index")
-	public String index() {
+	@GetMapping("/list")
+	public String list() {
 		return "index";
 	}
-
 	
 }
