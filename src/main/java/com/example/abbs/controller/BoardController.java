@@ -47,4 +47,8 @@ public class BoardController {
 		return "board/list";
 	}
 	
+	@GetMapping("/insert")
+	public String insertForm() {
+		return "board/insert";
+	}
 }
