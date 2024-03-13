@@ -2,7 +2,9 @@ package com.example.abbs.controller;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,8 +19,11 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 
 import com.example.abbs.entity.Board;
+import com.example.abbs.entity.Like;
 import com.example.abbs.entity.Reply;
 import com.example.abbs.service.BoardService;
+import com.example.abbs.service.LikeService;
+import com.example.abbs.service.ReplyService;
 import com.example.abbs.util.JsonUtil;
 
 import jakarta.servlet.http.HttpSession;
@@ -27,6 +32,8 @@ import jakarta.servlet.http.HttpSession;
 @RequestMapping("/board")
 public class BoardController {
 	@Autowired private BoardService boardService;
+	@Autowired private ReplyService replyService;
+	@Autowired private LikeService likeService;
 	@Autowired private JsonUtil jsonUtil;
 	@Value("${spring.servlet.multipart.location}") private String uploadDir;
 
@@ -93,9 +100,9 @@ public class BoardController {
 	@GetMapping("/detail/{bid}/{uid}")
 	public String detail(@PathVariable int bid, @PathVariable String uid, String option,
 			HttpSession session, Model model) {
-		// 본인이 조회한 경우 조회수 증가시키지 않음
+		// 본인이 조회한 경우 또는 댓글 작성후에는 조회수 증가시키지 않음
 		String sessUid = (String) session.getAttribute("sessUid");
-		if (!uid.equals(sessUid))
+		if (!uid.equals(sessUid) && (option==null || option.equals("")))
 			boardService.increaseViewCount(bid);
 		
 		Board board = boardService.getBoard(bid);
@@ -106,9 +113,53 @@ public class BoardController {
 		}
 		model.addAttribute("board", board);
 		
-		List<Reply> replyList = null;
+		// 좋아요 처리
+		Like like = likeService.getLike(bid, sessUid);
+		if (like == null)
+			session.setAttribute("likeClicked", 0);
+		else
+			session.setAttribute("likeClicked", like.getValue());
+		model.addAttribute("count", board.getLikeCount());
+		
+		List<Reply> replyList = replyService.getReplyList(bid);
 		model.addAttribute("replyList", replyList);
 		return "board/detail";
+	}
+	
+	@GetMapping("/delete/{bid}")
+	public String delete(@PathVariable int bid, HttpSession session) {
+		boardService.deleteBoard(bid);
+		return "redirect:/board/list?p=" + session.getAttribute("currentBoardPage");
+	}
+	
+	@PostMapping("/reply")
+	public String reply(int bid, String uid, String comment, HttpSession session) {
+		String sessUid = (String) session.getAttribute("sessUid");
+		int isMine = (sessUid.equals(uid)) ? 1 : 0;
+		Reply reply = new Reply(comment, sessUid, bid, isMine);
+		
+		replyService.insertReply(reply);
+		boardService.increaseReplyCount(bid);
+		
+		return "redirect:/board/detail/" + bid + "/" + uid + "?option=DNI";
+	}
+	
+	// AJAX 처리
+	@GetMapping("/like/{bid}")
+	public String like(@PathVariable int bid, HttpSession session, Model model) {
+		String sessUid = (String) session.getAttribute("sessUid");
+		Like like = likeService.getLike(bid, sessUid);
+		if (like == null) {
+			likeService.insertLike(new Like(sessUid, bid, 1));
+			session.setAttribute("likeClicked", 1);
+		} else {
+			int value = likeService.toggleLike(like);
+			session.setAttribute("likeClicked", value);
+		}
+		int count = likeService.getLikeCount(bid);
+		boardService.updateLikeCount(bid, count);
+		model.addAttribute("count", count);
+		return "board/detail::#likeCount";
 	}
 	
 }
